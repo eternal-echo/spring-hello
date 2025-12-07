@@ -1,0 +1,22 @@
+# Maven / Build outputs
+/target/
+/build/
+/.gradle/
+
+# IDE / Workspace
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+.vscode/
+
+# OS / Misc
+.DS_Store
+Thumbs.db
+*.log
+
+# Spring Boot
+spring.log
