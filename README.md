@@ -39,11 +39,45 @@ curl http://localhost:8080/
 - 根: `/`
 
 ## 客户端模式示例
+这里的“客户端”指 OAuth2 客户端凭证（client_id / client_secret），本示例内存预置了一个客户端：`demo-client / secret`，它被允许使用客户端模式（`client_credentials`）获取访问令牌。命令如下：
 ```bash
 curl -u demo-client:secret \
   -d "grant_type=client_credentials&scope=api.read" \
   http://localhost:8080/oauth2/token
 ```
+说明：
+- `-u demo-client:secret` 通过 HTTP Basic 传递 client_id/client_secret。
+- `grant_type=client_credentials` 表示客户端模式，不涉及用户登录，凭客户端身份获取访问令牌。
+- `scope=api.read` 请求作用域，本客户端配置中允许的 scopes 包含 `api.read`。
+返回的 JSON 中包含 `access_token`、`token_type`、`expires_in` 等，即表明授权服务器按 OAuth2 规范完成了客户端模式颁发。
+
+## 如何为你自己的客户端接入（入门步骤）
+1) 注册客户端（注册一次即可）  
+   - 在 `AuthorizationServerConfig` 中新增一个 `RegisteredClient`，设置：  
+     - `clientId` / `clientSecret`（生产环境请用加密存储）；  
+     - 支持的 grant 类型（如授权码 + PKCE、client_credentials、refresh_token）；  
+     - 允许的 `redirectUri`（授权码必填）；  
+     - 允许的 `scope`（如 `openid`, `profile`, 业务 scope）。  
+   - Demo 里用的是内存 `InMemoryRegisteredClientRepository`，生产可改为 JDBC/JPA。
+
+2) （可选）暴露发现/JWKS 便于客户端自动配置  
+   - 如果要让外部客户端自动发现配置和公钥，可在安全链中对 `/.well-known/openid-configuration`、`/.well-known/jwks.json` 放开匿名访问。
+
+3) 客户端使用授权码 + PKCE（有用户交互）  
+   - 构造 authorize URL：`/oauth2/authorize?response_type=code&client_id=...&redirect_uri=...&scope=...&code_challenge=...&code_challenge_method=S256`  
+   - 用户在浏览器登录/同意后，携带 `code` 重定向回 `redirect_uri`。  
+   - 客户端用 `code` + `code_verifier` 交换令牌：`POST /oauth2/token`，`grant_type=authorization_code`。  
+   - 需要前端/后端应用能处理重定向、存储 `code_verifier` 并发起令牌请求。
+
+4) 客户端使用 client_credentials（机器到机器，无用户交互）  
+   - 直接 `POST /oauth2/token`，携带 HTTP Basic (`client_id:client_secret`)，参数 `grant_type=client_credentials&scope=...`。  
+   - 返回 `access_token`（JWT），可带到受保护资源服务器的 `Authorization: Bearer ...` 头访问。
+
+5) 校验令牌 / 资源访问  
+   - 资源服务器（或本服务自身）启用 JWT 资源服务器支持，配置 issuer 或 JWKS URI，携带 `Authorization: Bearer <token>` 调用受保护接口（如本例 `/test1`）。
+
+6) 生产注意事项  
+   - 强制 HTTPS；持久化客户端/用户；开启同意页；合理的 Token TTL 与刷新策略；限流/审计/日志；密钥轮换；不要在源码中硬编码机密。
 
 ## 授权码 + PKCE 示例
 ```bash
